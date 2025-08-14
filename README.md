@@ -41,7 +41,7 @@ When writing an OS you will benefit from experience in:
 
 Here is the broad roadmap we will follow:
 
-1. Building a freestanding kernel
+1. [Building a freestanding kernel](01_Freestanding_kernel/README.md)
 2. Booting using Limine
 3. Terminal output
 4. Loading a GDT
