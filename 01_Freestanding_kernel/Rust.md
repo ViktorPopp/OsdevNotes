@@ -89,9 +89,8 @@ Right now our linker script doesn't really do anything. To use it we create a `b
 
 ```rust
 fn main() {
-    let arch = var("CARGO_CFG_TARGET_ARCH").unwrap();
-    println!("cargo:rustc-link-arg=-Tlinker-{arch}.ld");
-    println!("cargo:rerun-if-changed=linker-{arch}.ld");
+    println!("cargo:rustc-link-arg=-Tlinker.ld");
+    println!("cargo:rerun-if-changed=linker.ld");
 }
 ```
 
@@ -99,7 +98,7 @@ You will also need to add `-C relocation-model=static` to the `RUSTFLAGS` enviro
 
 ## The Entrypoint
 
-The final step is the create a file named `src/main.rs`:
+Next we will create out simple entrypoint in `src/main.rs`:
 
 ```rust
 #![no_std]
@@ -129,4 +128,66 @@ fn halt() -> ! {
         }
     }
 }
+```
+
+## The Makefile
+
+To easier build our kernel with diffrent configs and profiles we use a makefile.
+
+We want 2 things: an `all` rule for building the kernel and a `clean` rule for removing intermediates. We also nuke all build-in variables and create a custom macro for setting user variables.
+
+```py
+# Nuke built-in rules and variables.
+MAKEFLAGS += -rR
+.SUFFIXES:
+
+# Utility macro for setting user variables
+override USER_VARIABLE = $(if $(filter $(origin $(1)),default undefined),$(eval override $(1) := $(2)))
+
+# This is the name that our final executable will have.
+override OUTPUT := kernel
+
+# We will use 86_64
+$(call USER_VARIABLE,KARCH,x86_64)
+
+# Set the target
+ifeq ($(RUST_TARGET),)
+    override RUST_TARGET := $(KARCH)-unknown-none
+endif
+
+# Set the profile to development
+ifeq ($(RUST_PROFILE),)
+    override RUST_PROFILE := dev
+endif
+
+# Set the profiles subdirectory
+override RUST_PROFILE_SUBDIR := $(RUST_PROFILE)
+ifeq ($(RUST_PROFILE),dev)
+    override RUST_PROFILE_SUBDIR := debug
+endif
+
+.PHONY: all clean
+
+all:
+    RUSTFLAGS="-C relocation-model=static" cargo build --target $(RUST_TARGET) --profile $(RUST_PROFILE)
+    cp target/$(RUST_TARGET)/$(RUST_PROFILE_SUBDIR)/$$(cd target/$(RUST_TARGET)/$(RUST_PROFILE_SUBDIR) && find -maxdepth 1 -perm -111 -type f) kernel
+
+clean:
+    cargo clean
+    rm -rf kernel
+```
+
+We also create a Cargo config file in `.cargo/config.toml`...
+
+```js
+[unstable]
+build-std = ["core", "compiler_builtins", "alloc"]
+```
+
+...and a `rust-toolchain.toml` to pin our nightly toolchain to improve stability:
+
+```js
+[toolchain]
+channel = "nightly-2025-04-03"
+targets = ["x86_64-unknown-none"]
 ```
